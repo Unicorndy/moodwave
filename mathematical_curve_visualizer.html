@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mathematical Curve Visualizer</title>
+<style>
+:root{--bg:#030611;--panel:rgba(5,10,24,.88);--electric:#7df9ff;--violet:#b56cff;--pink:#ff8bd1;--white:#f5fdff;--muted:#8aa8bd}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 24%,rgba(125,249,255,.15),transparent 30%),radial-gradient(circle at 72% 76%,rgba(255,139,209,.13),transparent 30%),linear-gradient(135deg,#02040c,#05091a 48%,#02030a);color:var(--white);font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;display:grid;place-items:center;overflow:hidden}
+.terminal{width:min(1120px,95vw);border:1px solid rgba(125,249,255,.3);background:var(--panel);border-radius:22px;overflow:hidden;box-shadow:0 0 80px rgba(125,249,255,.1),inset 0 0 48px rgba(181,108,255,.045);position:relative}
+.terminal:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(255,255,255,.028) 0,rgba(255,255,255,.028) 1px,transparent 1px,transparent 5px);opacity:.32;mix-blend-mode:screen}
+.bar{height:46px;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid rgba(125,249,255,.18);color:var(--muted);font-size:13px}
+.dot{width:11px;height:11px;border-radius:999px;display:inline-block}.red{background:#ff5f56}.yellow{background:#ffbd2e}.green{background:#27c93f}
+.stage{position:relative;height:min(680px,74vh);padding:24px}
+.cmd{position:absolute;top:20px;left:28px;z-index:3;color:var(--electric);font-size:clamp(12px,2vw,15px);text-shadow:0 0 14px rgba(125,249,255,.9)}
+.cmd .mode{color:var(--pink)}
+.cursor{display:inline-block;width:8px;height:1em;background:var(--electric);vertical-align:middle;animation:blink .9s steps(2,start) infinite;box-shadow:0 0 12px var(--electric)}
+@keyframes blink{50%{opacity:0}}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.overlay{position:absolute;inset:0;pointer-events:none;background:linear-gradient(rgba(125,249,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(125,249,255,.035) 1px,transparent 1px);background-size:80px 80px;mask-image:radial-gradient(circle at center,black,transparent 80%);opacity:.6}
+.formula-card{position:absolute;right:28px;top:64px;width:min(370px,calc(100% - 56px));padding:16px 18px;border:1px solid rgba(125,249,255,.22);border-radius:18px;background:rgba(3,8,20,.62);backdrop-filter:blur(10px);box-shadow:0 0 30px rgba(125,249,255,.06);z-index:4}
+.formula-title{color:var(--pink);font-size:13px;margin-bottom:8px}.formula{color:var(--white);font-size:13px;line-height:1.5;white-space:pre-wrap}.desc{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.5}
+.controls{position:absolute;left:28px;right:28px;bottom:24px;z-index:5;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.buttons{display:flex;flex-wrap:wrap;gap:8px}
+button{border:1px solid rgba(125,249,255,.45);background:rgba(125,249,255,.08);color:var(--white);border-radius:999px;padding:10px 13px;font-family:inherit;cursor:pointer;box-shadow:0 0 20px rgba(125,249,255,.08);transition:transform .18s ease,background .18s ease,border .18s ease}
+button:hover{transform:translateY(-1px);background:rgba(125,249,255,.16)}button.active{border-color:rgba(255,139,209,.8);background:rgba(255,139,209,.16);color:#fff0fb}
+.hint{color:var(--muted);font-size:12px;max-width:400px;line-height:1.5}
+@media(max-width:720px){.stage{height:680px;padding:12px}.cmd{left:16px}.controls{left:16px;right:16px;bottom:16px}.formula-card{top:58px;left:16px;right:16px;width:auto}.hint{display:none}}
+</style>
+</head>
+<body>
+<main class="terminal">
+<div class="bar"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span>signal-console / mathematical-curve-visualizer.html</span></div>
+<section class="stage">
+<canvas id="canvas"></canvas><div class="overlay"></div>
+<div class="cmd">$ math.visualize --curve <span class="mode" id="cmdMode">lissajous</span> --electric-reactive <span class="cursor"></span></div>
+<div class="formula-card"><div class="formula-title" id="formulaTitle">Lissajous curve</div><div class="formula" id="formulaText">x = sin(3t)
+y = sin(4t + π/2)</div><div class="desc" id="formulaDesc">Elegant oscilloscope-style loop. Very suitable for music, signal, and dance-like movement.</div></div>
+<div class="controls"><div class="buttons"><button data-mode="lissajous" class="active">Lissajous</button><button data-mode="rose">Rose</button><button data-mode="butterfly">Butterfly</button><button data-mode="heart">Heart</button><button data-mode="spiro">Spirograph</button><button data-mode="ballet">Ballet curve</button><button id="autoBtn">Auto morph</button></div><div class="hint">Canvas-only demo. Curves are generated from equations, then smoothly morphed with electric particles and glow.</div></div>
+</section>
+</main>
+<script>
+const canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d");
+const buttons=[...document.querySelectorAll("button[data-mode]")],autoBtn=document.getElementById("autoBtn"),cmdMode=document.getElementById("cmdMode"),formulaTitle=document.getElementById("formulaTitle"),formulaText=document.getElementById("formulaText"),formulaDesc=document.getElementById("formulaDesc");
+let width=0,height=0,dpr=Math.min(window.devicePixelRatio||1,2);
+const POINT_COUNT=760;let currentMode="lissajous",fromPoints=[],toPoints=[],displayPoints=[],morphProgress=1,auto=false,autoIndex=0;
+const modes=["lissajous","rose","butterfly","heart","spiro","ballet"];
+const formulas={lissajous:{title:"Lissajous curve",text:"x = sin(3t)\ny = sin(4t + π/2)",desc:"Elegant oscilloscope-style loop. Very suitable for music, signal, and dance-like movement."},rose:{title:"Rose curve",text:"r = sin(5θ)\nx = r cos(θ)\ny = r sin(θ)",desc:"Flower-like polar curve. Great for ballet, bloom, and radial music visuals."},butterfly:{title:"Butterfly curve",text:"r = e^sin(θ) - 2cos(4θ) + sin⁵((2θ - π)/24)",desc:"Organic and complex. It creates a dramatic butterfly-like stage shape."},heart:{title:"Heart curve",text:"x = 16sin³(t)\ny = 13cos(t) - 5cos(2t) - 2cos(3t) - cos(4t)",desc:"Good for heartbeat, emotional pulse, and romantic visual transitions."},spiro:{title:"Hypotrochoid / Spirograph",text:"x = (R-r)cos(t) + d cos(((R-r)/r)t)\ny = (R-r)sin(t) - d sin(((R-r)/r)t)",desc:"Mechanical, elegant looping geometry. Excellent for premium generative art."},ballet:{title:"Ballet curve",text:"custom parametric line-art\narms + torso + tutu + arabesque leg",desc:"A stylized ballet arabesque built from connected parametric strokes."}};
+const particles=Array.from({length:160},()=>({x:Math.random(),y:Math.random(),vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4,size:Math.random()*1.8+.6,phase:Math.random()*Math.PI*2}));
+function resize(){const rect=canvas.parentElement.getBoundingClientRect();width=rect.width;height=rect.height;canvas.width=Math.floor(width*dpr);canvas.height=Math.floor(height*dpr);canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;ctx.setTransform(dpr,0,0,dpr,0,0);setMode(currentMode,true)}
+window.addEventListener("resize",resize);
+function normalize(points,scale=1){let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;for(const p of points){minX=Math.min(minX,p[0]);maxX=Math.max(maxX,p[0]);minY=Math.min(minY,p[1]);maxY=Math.max(maxY,p[1])}const w=maxX-minX||1,h=maxY-minY||1,s=Math.min(width*.58/w,height*.58/h)*scale,cx=(minX+maxX)/2,cy=(minY+maxY)/2;return points.map(([x,y])=>[width/2+(x-cx)*s,height/2+(y-cy)*s])}
+function lissajous(){const pts=[];for(let i=0;i<POINT_COUNT;i++){const t=i/POINT_COUNT*Math.PI*2;pts.push([Math.sin(3*t),Math.sin(4*t+Math.PI/2)])}return normalize(pts,1.05)}
+function rose(){const pts=[];for(let i=0;i<POINT_COUNT;i++){const th=i/POINT_COUNT*Math.PI*2,r=Math.sin(5*th);pts.push([r*Math.cos(th),r*Math.sin(th)])}return normalize(pts,1.05)}
+function butterfly(){const pts=[];for(let i=0;i<POINT_COUNT;i++){const th=i/POINT_COUNT*Math.PI*12,r=Math.exp(Math.sin(th))-2*Math.cos(4*th)+Math.pow(Math.sin((2*th-Math.PI)/24),5);pts.push([r*Math.cos(th),-r*Math.sin(th)])}return normalize(pts,.78)}
+function heart(){const pts=[];for(let i=0;i<POINT_COUNT;i++){const t=i/POINT_COUNT*Math.PI*2,x=16*Math.pow(Math.sin(t),3),y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);pts.push([x,-y])}return normalize(pts,.86)}
+function spiro(){const pts=[],R=6,r=2.25,d=4.4;for(let i=0;i<POINT_COUNT;i++){const t=i/POINT_COUNT*Math.PI*18,x=(R-r)*Math.cos(t)+d*Math.cos((R-r)/r*t),y=(R-r)*Math.sin(t)-d*Math.sin((R-r)/r*t);pts.push([x,y])}return normalize(pts,.92)}
+function resamplePolyline(control,count){const segs=[];let total=0;for(let i=0;i<control.length-1;i++){const a=control[i],b=control[i+1],len=Math.hypot(b[0]-a[0],b[1]-a[1]);segs.push({a,b,len});total+=len}const pts=[];for(let i=0;i<count;i++){const target=i/(count-1)*total;let travelled=0;for(const seg of segs){if(travelled+seg.len>=target){const local=seg.len===0?0:(target-travelled)/seg.len;pts.push([seg.a[0]+(seg.b[0]-seg.a[0])*local,seg.a[1]+(seg.b[1]-seg.a[1])*local]);break}travelled+=seg.len}}return pts}
+function ballet(){const control=[[470,120],[452,132],[445,152],[455,172],[478,180],[502,170],[510,148],[500,128],[480,120],[470,120],[472,180],[466,210],[452,246],[458,284],[484,315],[520,330],[548,314],[538,282],[510,246],[488,220],[466,210],[415,180],[355,152],[300,145],[258,158],[300,170],[360,186],[425,220],[466,235],[530,205],[600,170],[680,146],[730,152],[686,168],[612,198],[540,238],[405,315],[440,292],[500,282],[570,294],[612,322],[582,350],[520,364],[448,354],[405,315],[500,350],[485,392],[468,432],[452,468],[420,492],[382,494],[420,472],[442,438],[460,390],[480,345],[535,330],[600,315],[670,294],[742,260],[812,224],[865,190],[836,226],[772,268],[698,306],[620,336],[548,352],[520,330],[484,315],[466,210],[470,120]];const raw=resamplePolyline(control,POINT_COUNT).map(([x,y])=>[x-480,y-290]);return normalize(raw,1.12)}
+function curveFor(mode){return mode==="lissajous"?lissajous():mode==="rose"?rose():mode==="butterfly"?butterfly():mode==="heart"?heart():mode==="spiro"?spiro():mode==="ballet"?ballet():lissajous()}
+function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+function setMode(mode,instant=false){currentMode=mode;const target=curveFor(mode);if(!displayPoints.length||instant){displayPoints=target.map(p=>[...p]);fromPoints=target.map(p=>[...p]);toPoints=target.map(p=>[...p]);morphProgress=1}else{fromPoints=displayPoints.map(p=>[...p]);toPoints=target;morphProgress=0}buttons.forEach(btn=>btn.classList.toggle("active",btn.dataset.mode===mode));cmdMode.textContent=mode;formulaTitle.textContent=formulas[mode].title;formulaText.textContent=formulas[mode].text;formulaDesc.textContent=formulas[mode].desc}
+function drawBackground(time){ctx.clearRect(0,0,width,height);const cx=width/2,cy=height/2,maxR=Math.min(width,height)*.42;ctx.save();ctx.globalCompositeOperation="screen";for(let i=0;i<4;i++){const r=maxR*(.35+i*.22)+Math.sin(time*.002+i)*8;ctx.beginPath();ctx.strokeStyle=`rgba(125,249,255,${.035-i*.004})`;ctx.lineWidth=1;ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke()}ctx.restore()}
+function drawParticles(time){ctx.save();ctx.globalCompositeOperation="lighter";for(const p of particles){const targetPoint=displayPoints[Math.floor((p.phase/(Math.PI*2))*displayPoints.length)%displayPoints.length];p.x+=p.vx/width;p.y+=p.vy/height;let px=p.x*width,py=p.y*height;if(targetPoint){px+=(targetPoint[0]-px)*.012;py+=(targetPoint[1]-py)*.012;p.x=px/width;p.y=py/height}if(p.x<0||p.x>1)p.vx*=-1;if(p.y<0||p.y>1)p.vy*=-1;const pulse=.45+.55*Math.sin(time*.004+p.phase);ctx.beginPath();ctx.fillStyle=`rgba(125,249,255,${.12+pulse*.42})`;ctx.arc(px,py,p.size+pulse*1.2,0,Math.PI*2);ctx.fill()}ctx.restore()}
+function drawCurve(points,time){if(!points.length)return;ctx.save();ctx.globalCompositeOperation="lighter";ctx.lineWidth=16;ctx.strokeStyle="rgba(125,249,255,.045)";ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.stroke();ctx.lineWidth=7;ctx.strokeStyle="rgba(181,108,255,.18)";ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.stroke();const g=ctx.createLinearGradient(width*.25,height*.25,width*.75,height*.75);g.addColorStop(0,"rgba(245,253,255,.96)");g.addColorStop(.42,"rgba(125,249,255,.96)");g.addColorStop(.74,"rgba(255,139,209,.9)");g.addColorStop(1,"rgba(181,108,255,.9)");ctx.lineWidth=2.2;ctx.strokeStyle=g;ctx.beginPath();points.forEach(([x,y],i)=>{const j=Math.sin(i*.31+time*.006)*1.4,j2=Math.cos(i*.19+time*.004)*1.2;i?ctx.lineTo(x+j,y+j2):ctx.moveTo(x+j,y+j2)});ctx.closePath();ctx.stroke();for(let k=0;k<8;k++){const idx=Math.floor((time*.06+k*88)%points.length),[x,y]=points[idx],r=2.2+Math.sin(time*.01+k)*1.2;ctx.beginPath();ctx.fillStyle="rgba(245,253,255,.85)";ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()}ctx.restore()}
+function animate(time=0){drawBackground(time);if(morphProgress<1){morphProgress=Math.min(1,morphProgress+.018);const e=ease(morphProgress);displayPoints=fromPoints.map((p,i)=>[p[0]+(toPoints[i][0]-p[0])*e,p[1]+(toPoints[i][1]-p[1])*e])}const breathed=displayPoints.map(([x,y],i)=>{const dx=x-width/2,dy=y-height/2,b=1+Math.sin(time*.0018)*.012,el=Math.sin(i*.23+time*.008)*1.1;return[width/2+dx*b+el,height/2+dy*b+Math.cos(i*.25+time*.007)*1.1]});drawParticles(time);drawCurve(breathed,time);requestAnimationFrame(animate)}
+buttons.forEach(btn=>btn.addEventListener("click",()=>{auto=false;autoBtn.classList.remove("active");setMode(btn.dataset.mode)}));
+autoBtn.addEventListener("click",()=>{auto=!auto;autoBtn.classList.toggle("active",auto)});
+setInterval(()=>{if(!auto)return;autoIndex=(autoIndex+1)%modes.length;setMode(modes[autoIndex])},2600);
+resize();setMode("lissajous",true);animate();
+</script>
+</body>
+</html>
