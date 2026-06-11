@@ -61,13 +61,21 @@
     #bgWall.stretch { background-size: 100% 100%; }
     #bgWall.retain { background-size: auto; }
     body.has-wall { background: transparent; }
-    /* animated gradient themes */
-    body.bg-anim { background-size: 300% 300% !important; animation: bgshift 26s ease infinite; }
+    /* animated gradient themes live on a FIXED viewport-sized layer so the
+       300% gradient motion is actually visible (on body it was too large to see) */
+    #bgGrad {
+      position: fixed; inset: 0; z-index: -3; display: none;
+      background-size: 300% 300%; background-position: 0% 50%;
+    }
+    #bgGrad.on { display: block; }
+    #bgGrad.anim { animation: bgshift 18s ease infinite; }
     @keyframes bgshift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-    body.bg-aurora { background: linear-gradient(135deg,#07070c,#143a4d,#3b0764,#07070c); }
-    body.bg-sunset { background: linear-gradient(135deg,#160a10,#7c2d12,#be185d,#160a10); }
-    body.bg-ocean  { background: linear-gradient(135deg,#020617,#0c4a6e,#134e4a,#020617); }
-    body.bg-violet { background: linear-gradient(135deg,#0c0a2e,#4c1d95,#831843,#0c0a2e); }
+    #bgGrad.bg-aurora { background-image: linear-gradient(135deg,#07070c,#143a4d,#3b0764,#0b2d3a,#07070c); }
+    #bgGrad.bg-sunset { background-image: linear-gradient(135deg,#160a10,#7c2d12,#be185d,#92400e,#160a10); }
+    #bgGrad.bg-ocean  { background-image: linear-gradient(135deg,#020617,#0c4a6e,#134e4a,#155e75,#020617); }
+    #bgGrad.bg-violet { background-image: linear-gradient(135deg,#0c0a2e,#4c1d95,#831843,#3b0764,#0c0a2e); }
+    body.has-grad { background: #07070c; }
+    .bgpanel[hidden] { display: none; } /* beat .bgpanel's display:flex so hide actually hides */
     .bgpanel {
       flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
       background: #14141d; border-radius: 8px; padding: 10px 12px;
@@ -138,6 +146,7 @@
   </style>
 </head>
 <body>
+  <div id="bgGrad"></div>
   <div id="bgWall" class="fill"></div>
   <h1>🎵 Moodwave</h1>
   <p class="sub">101 algorithm × mood pairings. Press Play (or add music) — click a card to focus, click again to zoom fullscreen.</p>
@@ -172,6 +181,8 @@
       </select>
       <button class="secondary" id="bgClear" title="Remove wallpaper">✕</button>
       <input type="file" id="bgFile" accept="image/*" hidden />
+      <button class="secondary" id="bgAnimBtn" title="Toggle gradient animation" style="margin-left:14px">🎞️ Animate: On</button>
+      <button class="secondary" id="bgHide" title="Collapse this panel" style="margin-left:auto">▲ Hide</button>
     </div>
     <div class="playlist" id="playlist"></div>
   </div>
@@ -605,22 +616,35 @@
       },
       matrix(s, ctx, w, h, a, beat, t, col) {
         const fs=14,cols=Math.max(1,Math.floor(w/fs)); if(!s.d||s.d.length!==cols){s.d=Array.from({length:cols},()=>Math.random()*h/fs);}
-        ctx.font=fs+"px monospace"; const chars="01ｱｲｳｴｵｶｷｸ<>*#@";const trail=REDUCED?4:8;
-        if(s.pu===undefined)s.pu=0; s.pu=beat?1:s.pu*0.88;
-        if(beat)for(let k=0;k<2+(a.bass*4|0);k++)s.d[(Math.random()*cols)|0]=0; // beat: fresh streams from the top
-        const speed=(0.3*(a.tempo||1))*(1+s.pu*2.4)+a.bass*0.7; // surges on beats
+        if(s.pu===undefined)s.pu=0; s.pu=beat?1:s.pu*0.85;
+        ctx.font=fs+"px monospace"; const chars="01ｱｲｳｴｵｶｷｸ<>*#@日";
+        const trail=(REDUCED?4:7)+((a.bass*8)|0);                       // bass lengthens streams
+        if(beat)for(let k=0;k<3+(a.energy*9|0);k++)s.d[(Math.random()*cols)|0]=0; // beat: many fresh streams
+        const speed=(0.26*(a.tempo||1))*(1+s.pu*2.8)+a.bass*1.2;        // surges on beats + bass, paced by BPM
         for(let c=0;c<cols;c++){const head=s.d[c];
-          for(let k=0;k<trail;k++){const row=Math.floor(head)-k;if(row<0)continue;const y=row*fs,al=k===0?0.95:Math.max(0,0.6-k*0.08);
-            ctx.fillStyle=rgba(col,al);ctx.fillText(chars[(row+c)%chars.length],c*fs,y);}
-          s.d[c]+=speed; if(s.d[c]*fs>h+trail*fs&&Math.random()>0.975)s.d[c]=0;}
+          for(let k=0;k<trail;k++){const row=Math.floor(head)-k;if(row<0)continue;const y=row*fs;
+            const al=k===0?(0.9+s.pu*0.1):Math.max(0,0.55-k*(0.5/trail));
+            const ch=(a.treble>0.25&&Math.random()<a.treble*0.6)?"▓":chars[(row+c+((t*0.02)|0))%chars.length]; // treble flicker
+            ctx.fillStyle=k===0?rgba(col,Math.min(1,al+0.15)):rgba(col,al);
+            ctx.fillText(ch,c*fs,y);}
+          s.d[c]+=speed; if(s.d[c]*fs>h+trail*fs&&Math.random()>0.97)s.d[c]=0;}
       },
       network(s, ctx, w, h, a, beat, t, col) {
-        if(!s.n){const N=REDUCED?12:22;s.n=Array.from({length:N},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-0.5)*0.6,vy:(Math.random()-0.5)*0.6}));}
-        const N=s.n,linkD=Math.min(w,h)*0.34,linkD2=linkD*linkD;
-        for(const p of N){p.x+=p.vx*(1+a.bass*2);p.y+=p.vy*(1+a.bass*2);if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;}
+        if(!s.n){const N=REDUCED?12:22;s.n=Array.from({length:N},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-0.5)*0.6,vy:(Math.random()-0.5)*0.6,pulse:0}));s.rings=[];}
+        if(s.pu===undefined)s.pu=0; s.pu=beat?1:s.pu*0.9;
+        const N=s.n,linkD=Math.min(w,h)*(0.3+a.mid*0.18),linkD2=linkD*linkD;
+        const spd=(0.4+a.bass*2.6)*(0.6+(a.tempo||1)*0.6);            // drift paced by bass + BPM
+        if(beat){s.rings.push({r:4,life:1}); N[(Math.random()*N.length)|0].pulse=1;} // beat: flash ring + node ping
+        for(const p of N){p.x+=p.vx*spd*0.4;p.y+=p.vy*spd*0.4;
+          p.x+=(Math.random()-0.5)*a.treble*2.4;p.y+=(Math.random()-0.5)*a.treble*2.4; // treble jitter
+          if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;p.x=Math.max(0,Math.min(w,p.x));p.y=Math.max(0,Math.min(h,p.y));p.pulse*=0.92;}
         for(let i=0;i<N.length;i++)for(let j=i+1;j<N.length;j++){const dx=N[i].x-N[j].x,dy=N[i].y-N[j].y,d2=dx*dx+dy*dy;
-          if(d2<linkD2){const al=(1-d2/linkD2)*(0.25+a.treble*0.6);ctx.strokeStyle=rgba(col,al);ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(N[i].x,N[i].y);ctx.lineTo(N[j].x,N[j].y);ctx.stroke();}}
-        ctx.fillStyle=rgba(col,0.8);for(const p of N){ctx.beginPath();ctx.arc(p.x,p.y,1.8+a.bass*4+(beat?2:0),0,TAU);ctx.fill();}
+          if(d2<linkD2){const al=(1-d2/linkD2)*(0.22+a.treble*0.7+s.pu*0.3);ctx.strokeStyle=rgba(col,al);ctx.lineWidth=0.6+a.bass*2.4;ctx.beginPath();ctx.moveTo(N[i].x,N[i].y);ctx.lineTo(N[j].x,N[j].y);ctx.stroke();}}
+        for(const rg of s.rings){rg.r+=4+a.bass*9;rg.life-=0.04;if(rg.life<=0)continue;
+          ctx.strokeStyle=rgba(col,rg.life*0.5);ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(w/2,h/2,rg.r,0,TAU);ctx.stroke();}
+        s.rings=s.rings.filter(r=>r.life>0);
+        for(const p of N){if(!REDUCED&&p.pulse>0.05){ctx.shadowColor=rgba(col,0.9);ctx.shadowBlur=p.pulse*16;}
+          ctx.fillStyle=rgba(col,0.75+p.pulse*0.25);ctx.beginPath();ctx.arc(p.x,p.y,1.8+a.bass*4+p.pulse*6,0,TAU);ctx.fill();ctx.shadowBlur=0;}
       },
       spiro(s, ctx, w, h, a, beat, t, col) {
         if(s.ph===undefined)s.ph=0; s.ph+=0.01+a.mid*0.04; const cx=w/2,cy=h/2,R=Math.min(w,h)*0.34*(1+a.bass*0.15);
@@ -630,14 +654,25 @@
         ctx.stroke(); ctx.shadowBlur=0;
       },
       lightning(s, ctx, w, h, a, beat, t, col) {
-        if(!s.bolts){s.bolts=[];s.last=0;}
-        if(beat||t-s.last>700){s.last=t;const pts=[],segs=10,x0=Math.random()*w;let x=x0,y=0;pts.push([x,y]);
-          for(let i=1;i<=segs;i++){y=i/segs*h;x+=(Math.random()-0.5)*w*0.25;pts.push([Math.max(0,Math.min(w,x)),y]);}
-          s.bolts.push({pts,life:1});}
+        if(!s.bolts){s.bolts=[];s.last=0;s.flash=0;}
+        s.flash=beat?1:s.flash*0.85;
+        const interval=950-(a.tempo||1)*250-a.energy*420; // strikes more often when fast/loud
+        const makeBolt=()=>{const segs=9+(a.bass*9|0),x0=Math.random()*w,pts=[[x0,0]];let x=x0;
+          for(let i=1;i<=segs;i++){const y=i/segs*h;x+=(Math.random()-0.5)*w*0.28;pts.push([Math.max(0,Math.min(w,x)),y]);}
+          const branches=[],nb=(a.bass*3.5)|0;
+          for(let b=0;b<nb;b++){const idx=2+((Math.random()*(pts.length-3))|0);let[bx,by]=pts[idx];const bp=[[bx,by]];
+            for(let k=0;k<3;k++){bx+=(Math.random()-0.5)*w*0.22;by+=h*0.12;bp.push([bx,by]);}branches.push(bp);}
+          return {pts,branches,life:1};};
+        if(beat){for(let k=0;k<1+(a.bass*2|0);k++)s.bolts.push(makeBolt());s.last=t;}     // multiple bolts on a beat
+        else if(t-s.last>interval){s.bolts.push(makeBolt());s.last=t;}
+        if(s.flash>0.05){ctx.fillStyle=rgba(col,s.flash*0.07);ctx.fillRect(0,0,w,h);}     // screen flash on beats
         ctx.lineCap="round";
-        for(const b of s.bolts){b.life-=0.022;if(b.life<=0)continue;ctx.strokeStyle=rgba(col,b.life);ctx.lineWidth=1+a.bass*2.5;
-          if(!REDUCED){ctx.shadowColor=rgba(col,b.life);ctx.shadowBlur=10;} ctx.beginPath();ctx.moveTo(b.pts[0][0],b.pts[0][1]);
-          for(let i=1;i<b.pts.length;i++)ctx.lineTo(b.pts[i][0]+(Math.random()-0.5)*a.treble*8,b.pts[i][1]);ctx.stroke();}
+        const draw=(p,lw,al)=>{ctx.strokeStyle=rgba(col,al);ctx.lineWidth=lw;ctx.beginPath();ctx.moveTo(p[0][0],p[0][1]);
+          for(let i=1;i<p.length;i++)ctx.lineTo(p[i][0]+(Math.random()-0.5)*a.treble*11,p[i][1]);ctx.stroke();}; // treble jitter
+        for(const b of s.bolts){b.life-=0.03;if(b.life<=0)continue;
+          if(!REDUCED){ctx.shadowColor=rgba(col,b.life);ctx.shadowBlur=8+a.bass*18;}
+          draw(b.pts,1.4+a.bass*3.2,b.life);
+          for(const br of b.branches)draw(br,1+a.bass*1.6,b.life*0.55);}
         ctx.shadowBlur=0; s.bolts=s.bolts.filter(b=>b.life>0);
       },
       tree(s, ctx, w, h, a, beat, t, col) {
@@ -964,20 +999,27 @@
         ctx.fillStyle=rgba(col,0.9);for(const v of s.v){ctx.beginPath();ctx.arc(v[0]*w,v[1]*h,2+a.bass*4,0,TAU);ctx.fill();}
       },
       koch(s, ctx, w, h, a, beat, t, col) {
-        if(s.rot===undefined)s.rot=0;s.rot+=0.002+a.mid*0.01;
-        const depth=Math.min(4,2+Math.round(a.treble*3)),R=Math.min(w,h)*0.36*(1+a.bass*0.15),cx=w/2,cy=h/2;
+        if(s.rot===undefined){s.rot=0;s.sides=3;s.inv=1;s.last=0;}
+        s.rot+=0.002+a.mid*0.012;
+        // cycle the base shape & flip inward/outward over time and on strong beats
+        if(t-s.last>3200||(beat&&a.bass>0.5)){s.last=t;
+          s.sides=3+((Math.random()*4)|0);      // triangle / square / pentagon / hexagon Koch
+          s.inv=Math.random()<0.5?1:-1;}          // outward snowflake vs inward anti-snowflake
+        const depth=Math.min(4,2+Math.round(a.treble*3)),R=Math.min(w,h)*0.36*(1+a.bass*0.15),cx=w/2,cy=h/2,ns=s.sides;
+        const bump=s.inv*(0.45+a.energy*0.6); // spike height pulses with energy, sign flips direction
         let pts=[];
-        for(let k=0;k<3;k++){const a1=-Math.PI/2+k*TAU/3+s.rot;pts.push([cx+Math.cos(a1)*R,cy+Math.sin(a1)*R]);}
+        for(let k=0;k<ns;k++){const a1=-Math.PI/2+k*TAU/ns+s.rot;pts.push([cx+Math.cos(a1)*R,cy+Math.sin(a1)*R]);}
         pts.push(pts[0]);
         for(let dl=0;dl<depth;dl++){const np=[];
           for(let i=0;i<pts.length-1;i++){const [x1,y1]=pts[i],[x2,y2]=pts[i+1],dx=(x2-x1)/3,dy=(y2-y1)/3;
-            const mx=x1+dx*1.5+( -(dy)*Math.sqrt(3)/2),my=y1+dy*1.5+((dx)*Math.sqrt(3)/2);
+            const mx=x1+dx*1.5+(-(dy)*Math.sqrt(3)/2*bump),my=y1+dy*1.5+((dx)*Math.sqrt(3)/2*bump);
             np.push([x1,y1],[x1+dx,y1+dy],[mx,my],[x1+2*dx,y1+2*dy]);}
           np.push(pts[pts.length-1]);pts=np;}
-        ctx.strokeStyle=rgba(col,0.75);ctx.lineWidth=1+a.bass*1.4;
+        ctx.strokeStyle=rgba(col,0.78);ctx.lineWidth=1+a.bass*1.4;
         if(!REDUCED){ctx.shadowColor=rgba(col,0.7);ctx.shadowBlur=4+a.treble*12;}
         ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
-        for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);ctx.stroke();ctx.shadowBlur=0;
+        for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);ctx.closePath();ctx.stroke();
+        ctx.fillStyle=rgba(col,0.05+a.energy*0.08);ctx.fill();ctx.shadowBlur=0;
       },
       beziernet(s, ctx, w, h, a, beat, t, col) {
         if(!s.nodes){const N=REDUCED?5:7;
@@ -1026,19 +1068,19 @@
       },
       pendulum(s, ctx, w, h, a, beat, t, col) {
         if(s.kick===undefined)s.kick=0;
-        if(beat)s.kick=Math.min(0.7,s.kick+0.2+a.bass*0.25);
-        s.kick*=0.97;
+        if(beat)s.kick=Math.min(1.1,s.kick+0.3+a.bass*0.5);  // beats push the swing open more
+        s.kick*=0.96;
         const N=REDUCED?9:15,topY=h*0.06;
-        const amp=0.16+a.energy*0.4+s.kick*0.25; // gentle swing
+        const amp=0.14+a.energy*0.7+a.bass*0.3+s.kick*0.4;   // amplitude opens with the music
         for(let i=0;i<N;i++){
           const x0=(i+0.5)/N*w,len=h*0.35+ (i/N)*h*0.42;
-          const om=0.0013*(1+i*0.05)*(0.7+a.mid*0.6); // slower, calmer swing rates
+          const om=0.0014*(1+i*0.05)*(0.6+(a.tempo||1)*0.7+a.mid*0.5); // swing rate follows BPM
           const th=Math.sin(t*om+i*0.12)*amp;
           const bx=x0+Math.sin(th)*len*0.5,by=topY+Math.cos(th)*len;
-          ctx.strokeStyle=rgba(col,0.25+a.treble*0.4);ctx.lineWidth=1;
+          ctx.strokeStyle=rgba(col,0.22+a.treble*0.5);ctx.lineWidth=1;
           ctx.beginPath();ctx.moveTo(x0,topY);ctx.lineTo(bx,by);ctx.stroke();
-          const r=2.4+a.bass*5+(i/N)*2;
-          if(!REDUCED){ctx.shadowColor=rgba(col,0.8);ctx.shadowBlur=4+a.treble*12;}
+          const r=2.4+a.bass*6+(i/N)*2+s.kick*2;
+          if(!REDUCED){ctx.shadowColor=rgba(col,0.8);ctx.shadowBlur=4+a.treble*16+s.kick*10;}
           ctx.fillStyle=rgba(col,0.6+a.energy*0.4);
           ctx.beginPath();ctx.arc(bx,by,r,0,TAU);ctx.fill();ctx.shadowBlur=0;}
       },
@@ -1266,8 +1308,8 @@
         const G=REDUCED?11:17;
         if(!s.walls){
           s.walls=Array.from({length:G*G},()=>({R:true,B:true}));
-          s.vis=new Uint8Array(G*G);s.stack=[0];s.vis[0]=1;s.head=0;s.done=false;}
-        const steps=Math.floor(1+a.energy*4)+(beat?2:0);
+          s.vis=new Uint8Array(G*G);s.stack=[0];s.vis[0]=1;s.head=0;s.done=false;s.doneAt=0;}
+        const steps=Math.floor(0.5+(a.tempo||1)*1.5+a.energy*4)+(beat?(4+(a.bass*8|0)):0); // carve pace follows BPM, bursts on beats
         for(let k=0;k<steps&&!s.done;k++){
           if(!s.stack.length){s.done=true;break;}
           const cur=s.stack[s.stack.length-1],cx2=cur%G,cy2=Math.floor(cur/G);
@@ -1281,16 +1323,19 @@
           if(dir==="R")s.walls[cur].R=false;if(dir==="L")s.walls[nx].R=false;
           if(dir==="D")s.walls[cur].B=false;if(dir==="U")s.walls[nx].B=false;
           s.vis[nx]=1;s.stack.push(nx);s.head=nx;}
-        if(s.done&&beat&&a.bass>0.45){s.walls=null;return;}
-        const cw=w/G,chh=h/G;
-        ctx.strokeStyle=rgba(col,0.55+a.treble*0.35);ctx.lineWidth=1+a.bass;
+        if(s.done&&!s.doneAt)s.doneAt=t;
+        if(s.done&&((beat&&a.bass>0.4)||t-s.doneAt>2600)){s.walls=null;return;} // restart on beat or after a pause
+        const cw=w/G,chh=h/G,gl=a.treble*2.6; // treble glitches the walls
+        ctx.strokeStyle=rgba(col,0.55+a.treble*0.35+(beat?0.1:0));ctx.lineWidth=1+a.bass*1.6;
         ctx.beginPath();
         for(let y=0;y<G;y++)for(let x=0;x<G;x++){const i=y*G+x;
-          if(s.walls[i].R){ctx.moveTo((x+1)*cw,y*chh);ctx.lineTo((x+1)*cw,(y+1)*chh);}
-          if(s.walls[i].B){ctx.moveTo(x*cw,(y+1)*chh);ctx.lineTo((x+1)*cw,(y+1)*chh);}}
+          const gx=gl?(Math.random()-0.5)*gl:0,gy=gl?(Math.random()-0.5)*gl:0;
+          if(s.walls[i].R){ctx.moveTo((x+1)*cw+gx,y*chh+gy);ctx.lineTo((x+1)*cw+gx,(y+1)*chh+gy);}
+          if(s.walls[i].B){ctx.moveTo(x*cw+gx,(y+1)*chh+gy);ctx.lineTo((x+1)*cw+gx,(y+1)*chh+gy);}}
         ctx.stroke();
         const hx=s.head%G,hy=Math.floor(s.head/G);
-        ctx.fillStyle=rgba(col,0.9);ctx.fillRect(hx*cw+cw*0.25,hy*chh+chh*0.25,cw*0.5,chh*0.5);
+        if(!REDUCED){ctx.shadowColor=rgba(col,0.9);ctx.shadowBlur=4+a.bass*12;}
+        ctx.fillStyle=rgba(col,0.9);ctx.fillRect(hx*cw+cw*0.25,hy*chh+chh*0.25,cw*0.5,chh*0.5);ctx.shadowBlur=0;
       },
       terrain(s, ctx, w, h, a, beat, t, col) {
         if(!s.rows)s.rows=[];
@@ -1999,12 +2044,14 @@
           s.bb={minx,miny,maxx,maxy};s.p=0;}
         const N=s.sq.length;
         s.p+=(0.006+a.energy*0.012)*(a.tempo||1)+(beat?0.05:0);
-        const reveal=(s.p%(N+3)); // pause briefly at the end before restarting
-        // every cycle: new random orientation, mirror, size and drift
+        const base=(s.p%(N+3)); // pause briefly at the end before restarting
+        // every cycle: new random orientation, mirror, size, drift AND direction
         const cyc=Math.floor(s.p/(N+3));
         if(cyc!==s.cyc){s.cyc=cyc;s.rot=Math.random()*TAU;s.flip=Math.random()<0.5?-1:1;
-          s.scJ=0.65+Math.random()*0.45;s.jx=(Math.random()-0.5)*w*0.2;s.jy=(Math.random()-0.5)*h*0.2;}
-        if(s.rot===undefined){s.rot=0;s.flip=1;s.scJ=1;s.jx=0;s.jy=0;}
+          s.scJ=0.65+Math.random()*0.45;s.jx=(Math.random()-0.5)*w*0.2;s.jy=(Math.random()-0.5)*h*0.2;
+          s.rev=Math.random()<0.5;} // alternate cycles unwind the spiral in reverse
+        if(s.rot===undefined){s.rot=0;s.flip=1;s.scJ=1;s.jx=0;s.jy=0;s.rev=false;}
+        const reveal=s.rev?((N+3)-base):base;
         ctx.save();
         ctx.translate(w/2+s.jx,h/2+s.jy);
         ctx.rotate(s.rot+Math.sin(t*0.0003)*0.15);
@@ -2543,16 +2590,25 @@
     // ===== UI WIRING (page background) =====
     const bgBtn=document.getElementById("bgBtn"),bgPanel=document.getElementById("bgPanel");
     const bgWall=document.getElementById("bgWall"),bgFile=document.getElementById("bgFile");
-    const bgFit=document.getElementById("bgFit");
-    let bgUrl=null;
-    bgBtn.addEventListener("click",()=>{bgPanel.hidden=!bgPanel.hidden;});
+    const bgFit=document.getElementById("bgFit"),bgGrad=document.getElementById("bgGrad");
+    const bgAnimBtn=document.getElementById("bgAnimBtn"),bgHide=document.getElementById("bgHide");
+    let bgUrl=null, bgTheme="", bgAnim=true;
+    bgBtn.addEventListener("click",()=>{bgPanel.hidden=!bgPanel.hidden;}); // 🎨 BG toggles the panel
+    bgHide.addEventListener("click",()=>{bgPanel.hidden=true;});           // explicit collapse
+    function applyGrad(){
+      bgGrad.className=""; // reset
+      if(bgTheme){bgGrad.classList.add(bgTheme,"on"); if(bgAnim)bgGrad.classList.add("anim");
+        document.body.classList.add("has-grad");}
+      else document.body.classList.remove("has-grad");
+    }
     bgPanel.querySelectorAll(".sw").forEach(sw=>sw.addEventListener("click",()=>{
       bgPanel.querySelectorAll(".sw").forEach(b=>b.classList.remove("active"));
       sw.classList.add("active");
-      const theme=sw.dataset.bg;
-      document.body.classList.remove("bg-aurora","bg-sunset","bg-ocean","bg-violet","bg-anim");
-      if(theme)document.body.classList.add(theme,"bg-anim"); // moving animated gradient
+      bgTheme=sw.dataset.bg; applyGrad();
     }));
+    bgAnimBtn.addEventListener("click",()=>{
+      bgAnim=!bgAnim; bgAnimBtn.textContent="🎞️ Animate: "+(bgAnim?"On":"Off"); applyGrad();
+    });
     document.getElementById("bgImgBtn").addEventListener("click",()=>bgFile.click());
     bgFile.addEventListener("change",()=>{
       const f=bgFile.files[0]; if(!f)return;
