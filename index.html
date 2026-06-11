@@ -8,7 +8,7 @@
     :root { --bg: #0a0a10; --panel: #1b1b26; --accent: #6c5ce7; --text: #eee; }
     * { box-sizing: border-box; }
     body {
-      margin: 0; background: radial-gradient(1200px 600px at 50% -10%, #181826, var(--bg)); color: var(--text);
+      margin: 0; background: radial-gradient(1300px 760px at 50% -5%, #2b2b3a, #0a0a10 72%); color: var(--text);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       min-height: 100vh; padding: 20px;
     }
@@ -1720,16 +1720,24 @@
           ctx.stroke();}
       },
       asciiField(s, ctx, w, h, a, beat, t, col) {
-        if(!s.ps){const N=REDUCED?18:36;const CH="@#$%&*+=~:.";
-          s.ps=Array.from({length:N},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-0.5),vy:(Math.random()-0.5),c:(Math.random()*CH.length)|0}));s.CH=CH;}
+        if(!s.ps){const N=REDUCED?18:40;const CH="@#$%&*+=~:.";
+          s.ps=Array.from({length:N},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-0.5),vy:(Math.random()-0.5),c:(Math.random()*CH.length)|0,ph:Math.random()*TAU}));
+          s.CH=CH;s.hue=0;s.pu=0;}
+        s.pu=beat?1:s.pu*0.88;                 // beat pop
+        s.hue=(s.hue+0.4+a.bass*1.6)%360;      // colors cycle over time (faster with bass)
+        ctx.textAlign="center";ctx.textBaseline="middle";
         const drift=0.4+a.mid*1.6;
         for(const p of s.ps){
           p.x+=p.vx*drift;p.y+=p.vy*drift;
           if(p.x<0)p.x+=w;if(p.x>w)p.x-=w;if(p.y<0)p.y+=h;if(p.y>h)p.y-=h;
-          if(a.treble>0.3&&Math.random()<0.05)p.c=(Math.random()*s.CH.length)|0;
-          const fs=10+a.bass*14;
-          ctx.font=fs+"px monospace";ctx.fillStyle=rgba(col,0.4+a.energy*0.5);
+          if(a.treble>0.3&&Math.random()<0.06)p.c=(Math.random()*s.CH.length)|0;
+          // glyph size grows/shrinks with bass + treble + beats, plus an individual BPM-paced breathe
+          const breathe=0.5+0.5*Math.sin(t*0.004*(0.5+(a.tempo||1))+p.ph);
+          const fs=8+a.bass*24+a.treble*8+s.pu*12+breathe*6;
+          const c2=hueRotate(col,s.hue+p.ph*20); // each glyph a slightly different cycling hue
+          ctx.font=fs.toFixed(1)+"px monospace";ctx.fillStyle=rgba(c2,0.45+a.energy*0.5);
           ctx.fillText(s.CH[p.c],p.x,p.y);}
+        ctx.textAlign="left";ctx.textBaseline="alphabetic";
       },
       agentTrails(s, ctx, w, h, a, beat, t, col) {
         if(!s.cv||s.cw!==w){s.cv=document.createElement("canvas");s.cv.width=Math.max(1,w);s.cv.height=Math.max(1,h);s.cctx=s.cv.getContext("2d");s.cw=w;
