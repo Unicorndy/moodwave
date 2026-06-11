@@ -69,6 +69,9 @@ Use one of these options:
 
 ## Deploy on GitHub Pages
 
+Repository: https://github.com/Unicorndy/moodwave
+Live URL: https://unicorndy.github.io/moodwave/
+
 Use these steps to host the visualizer publicly:
 
 1. Push this project to a GitHub repository.
@@ -78,7 +81,7 @@ Use these steps to host the visualizer publicly:
   - `Branch`: `main` (or your default branch)
   - `Folder`: `/ (root)`
 4. Click `Save`.
-5. Wait for Pages to build, then open the URL GitHub shows (usually `https://<username>.github.io/<repo>/`).
+5. Wait for Pages to build, then open: https://unicorndy.github.io/moodwave/
 
 If your entry file is `index.html` in repository root, GitHub Pages serves it automatically as the site homepage.
 
