@@ -51,6 +51,23 @@
     }
     .pl-item .rm:hover { background: #ef4444; color: #fff; }
 
+    /* ===== free music search (Internet Archive) ===== */
+    .freepanel { flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+    .freepanel[hidden] { display: none; }
+    .freepanel input { background: #2d2d3a; color: var(--text); border: none; border-radius: 6px; padding: 8px 12px; font-size: 14px; min-width: 200px; flex: 1; }
+    .freehint { color: #9aa; font-size: 12px; }
+    .freeresults { flex-basis: 100%; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+    .freeresults:empty { display: none; }
+    .fr-item {
+      display: flex; align-items: center; gap: 10px; background: #2d2d3a; border-radius: 6px;
+      padding: 7px 11px; font-size: 12.5px; cursor: pointer; color: #cdd; border: 1px solid transparent;
+    }
+    .fr-item:hover { background: #34304f; border-color: var(--accent); }
+    .fr-item .fr-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .fr-item .fr-by { color: #889; font-size: 11px; flex-shrink: 0; max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fr-item.loading { opacity: .55; pointer-events: none; }
+    .fr-msg { color: #9aa; font-size: 12.5px; padding: 4px 2px; }
+
     /* ===== page background customizer ===== */
     #bgWall {
       position: fixed; inset: -48px; z-index: -2; display: none;
@@ -161,7 +178,8 @@
     <select id="trackSelect"></select>
     <button class="secondary nav" id="loopBtn" title="Loop: all tracks">🔁</button>
     <button class="secondary" id="uploadBtn">⬆ Add music</button>
-    <input type="file" id="fileInput" accept="audio/*" multiple hidden />
+    <input type="file" id="fileInput" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.oga,.flac,.opus" multiple hidden />
+    <button class="secondary" id="freeBtn" title="Search free royalty-free / public-domain music (works on mobile)">🎵 Free music</button>
     <button class="secondary" id="micBtn" title="Visualize from microphone">🎤 Mic</button>
     <button class="secondary" id="tabBtn" title="Capture a tab's audio (e.g. YouTube) — tick 'Share tab audio' in the picker">🖥️ Tab audio</button>
     <button class="secondary" id="bgBtn" title="Page background">🎨 BG</button>
@@ -186,6 +204,13 @@
       <input type="file" id="bgFile" accept="image/*" hidden />
       <button class="secondary" id="bgAnimBtn" title="Toggle gradient animation" style="margin-left:14px">🎞️ Animate: On</button>
       <button class="secondary" id="bgHide" title="Collapse this panel" style="margin-left:auto">▲ Hide</button>
+    </div>
+    <div class="freepanel" id="freePanel" hidden>
+      <input id="freeQuery" type="text" placeholder="Search free music — e.g. lofi chill, ambient, jazz, synthwave" />
+      <button id="freeSearch">🔎 Search</button>
+      <span class="freehint" id="freeHint">Royalty-free / public-domain audio streamed from the Internet Archive — works on iPhone &amp; Android.</span>
+      <button class="secondary" id="freeHide" style="margin-left:auto">▲ Hide</button>
+      <div class="freeresults" id="freeResults"></div>
     </div>
     <div class="playlist" id="playlist"></div>
   </div>
@@ -2547,6 +2572,96 @@
       if (firstNew && !engine.playing) playTrack(firstNew);
       else renderPlaylist();
     });
+
+    // ===== Free music: search & play (Internet Archive) =====
+    // archive.org serves an open JSON search API and CORS-enabled audio files,
+    // so we can fetch a track, decodeAudioData it, and drop it into the playlist
+    // using the exact same path as an upload. Works on iPhone & Android.
+    const freeBtn = document.getElementById("freeBtn");
+    const freePanel = document.getElementById("freePanel");
+    const freeQuery = document.getElementById("freeQuery");
+    const freeSearch = document.getElementById("freeSearch");
+    const freeHide = document.getElementById("freeHide");
+    const freeResults = document.getElementById("freeResults");
+
+    freeBtn.addEventListener("click", () => {
+      freePanel.hidden = !freePanel.hidden;
+      if (!freePanel.hidden) freeQuery.focus();
+    });
+    freeHide.addEventListener("click", () => { freePanel.hidden = true; });
+
+    function freeMsg(text) { freeResults.innerHTML = '<div class="fr-msg">' + text + "</div>"; }
+
+    async function runFreeSearch() {
+      const q = freeQuery.value.trim();
+      if (!q) { freeQuery.focus(); return; }
+      freeMsg("Searching…");
+      // Bias toward popular, real music tracks that have an MP3.
+      const query = "mediatype:(audio) AND format:(MP3) AND (" + q + ")";
+      const url = "https://archive.org/advancedsearch.php?q=" + encodeURIComponent(query) +
+        "&fl[]=identifier&fl[]=title&fl[]=creator&sort[]=downloads+desc&rows=25&page=1&output=json";
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("http " + res.status);
+        const data = await res.json();
+        const docs = (data.response && data.response.docs) || [];
+        if (!docs.length) { freeMsg("No results — try different words."); return; }
+        freeResults.innerHTML = "";
+        for (const doc of docs) {
+          const by = Array.isArray(doc.creator) ? doc.creator[0] : doc.creator;
+          const item = document.createElement("div");
+          item.className = "fr-item";
+          const title = document.createElement("span");
+          title.className = "fr-title"; title.textContent = doc.title || doc.identifier;
+          const who = document.createElement("span");
+          who.className = "fr-by"; who.textContent = by || "";
+          item.appendChild(title); item.appendChild(who);
+          item.addEventListener("click", () => loadFreeTrack(doc, item));
+          freeResults.appendChild(item);
+        }
+      } catch (e) {
+        freeMsg("Search failed — check your connection (this needs to be online).");
+      }
+    }
+    freeSearch.addEventListener("click", runFreeSearch);
+    freeQuery.addEventListener("keydown", (e) => { if (e.key === "Enter") runFreeSearch(); });
+
+    async function loadFreeTrack(doc, item) {
+      const id = doc.identifier;
+      const label = doc.title || id;
+      item.classList.add("loading");
+      const titleEl = item.querySelector(".fr-title");
+      const orig = titleEl.textContent;
+      titleEl.textContent = "Loading…  " + orig;
+      errorMsg.textContent = "";
+      try {
+        engine.ensureCtx();
+        if (engine.ctx.state === "suspended") await engine.ctx.resume();
+        // Find the best MP3 in the item's file list.
+        const meta = await (await fetch("https://archive.org/metadata/" + id)).json();
+        const files = (meta.files || []).filter(f => /\.mp3$/i.test(f.name || ""));
+        if (!files.length) throw new Error("no mp3");
+        // Prefer a full-quality VBR MP3 over the low-bitrate _64kb preview.
+        const pick = files.find(f => /vbr/i.test(f.format || "") && !/_64kb/i.test(f.name)) ||
+                     files.find(f => !/_64kb/i.test(f.name)) || files[0];
+        const fileUrl = "https://archive.org/download/" + id + "/" + encodeURIComponent(pick.name);
+        const buf = await (await fetch(fileUrl)).arrayBuffer();
+        const decoded = await engine.ctx.decodeAudioData(buf);
+        const plid = "pl-" + (plSeq++);
+        engine.setBuffer(plid, decoded);
+        playlist.push({ id: plid, name: label });
+        const opt = document.createElement("option");
+        opt.value = plid; opt.textContent = "♪ " + label;
+        trackSelect.appendChild(opt);
+        playTrack(plid);
+        freePanel.hidden = true;
+      } catch (e) {
+        errorMsg.textContent = "Couldn't load that track — try another.";
+      } finally {
+        item.classList.remove("loading");
+        titleEl.textContent = orig;
+      }
+    }
 
     // ===== UI WIRING (spotlight + zoom) =====
     // Click a card to focus it; click the focused card again to zoom it
